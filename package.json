@@ -1,0 +1,32 @@
+{
+  "name": "shopify-multistore-app-middleware",
+  "version": "0.0.1",
+  "description": "Enable custom app to be used in multiple shopify stores",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Pawel Jedrzejczyk",
+  "dependencies": {
+    "@types/express": "^4.17.15"
+  },
+  "devDependencies": {
+    "@shopify/shopify-api": "^6.1.0",
+    "@shopify/shopify-app-express": "1.x",
+    "typescript": "^4.9.4"
+  },
+  "peerDependencies": {
+    "@shopify/shopify-app-express": "1.x",
+    "@shopify/shopify-api": "6.x"
+  },
+  "license": "ISC"
+}
