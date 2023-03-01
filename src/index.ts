@@ -58,10 +58,12 @@ type createMultistoreMiddlewareFn = (
   shopifyAppCreateFn: createShopifyAppFunction
 ) => RequestHandler;
 
-const createMultistoreMiddleware: createMultistoreMiddlewareFn =
-  (shopifyAppCreateFn) => (req, res, next) => {
+const createMultistoreMiddleware: createMultistoreMiddlewareFn = (
+  shopifyAppCreateFn
+) => {
+  const shopifyAppMap: Record<string, ShopifyApp> = {};
+  return (req, res, next) => {
     const shop = extractShopFromReq(req);
-    const shopifyAppMap: Record<string, ShopifyApp> = {};
 
     if (shop && !res.locals?.shopify?.app) {
       let shopifyApp = shopifyAppMap[shop];
@@ -78,6 +80,7 @@ const createMultistoreMiddleware: createMultistoreMiddlewareFn =
 
     next();
   };
+};
 
 const getShopifyApp = (res: ResponseWithShopifyLocals): ShopifyApp =>
   res.locals.shopify.app;
