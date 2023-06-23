@@ -1,6 +1,7 @@
 import { NextFunction, Response, Request, RequestHandler } from "express";
 import { ShopifyApp } from "@shopify/shopify-app-express";
 import { Session } from "@shopify/shopify-api";
+import { series } from "async";
 
 function decodeJWT(token: string): Record<string, unknown> {
   const base64Url = token.split(".")[1];
@@ -20,6 +21,7 @@ const sanitizedShopName = (shop: string): string =>
     .toUpperCase();
 
 function extractShopFromReq(req: Request): string | undefined {
+  const headerShop = req.get("x-shopify-shop-domain");
   let queryShop = Array.isArray(req.query.shop)
     ? req.query.shop[0]
     : req.query.shop;
@@ -39,7 +41,7 @@ function extractShopFromReq(req: Request): string | undefined {
     }
   }
 
-  const shop = queryShop || sessionShop;
+  const shop = headerShop || sessionShop || queryShop;
   return shop;
 }
 
@@ -82,8 +84,8 @@ const createMultistoreMiddleware: createMultistoreMiddlewareFn = (
   };
 };
 
-const getShopifyApp = (res: ResponseWithShopifyLocals): ShopifyApp =>
-  res.locals.shopify.app;
+const getShopifyApp = (res: Response): ShopifyApp =>
+  (res as ResponseWithShopifyLocals).locals.shopify.app;
 
 type useShopifyAppMethod = (
   shopifyApp: ShopifyApp
@@ -95,9 +97,30 @@ const useShopifyApp =
     const shopifyApp = getShopifyApp(res);
     const handler = useShopifyAppHandler(shopifyApp);
     if (Array.isArray(handler)) {
-      handler.forEach((h) => {
-        h(req, res, next);
-      });
+      series<RequestHandler, string>(
+        handler.map((h) => {
+          return (callback) => {
+            h(req, res, (err) => {
+              if (err) {
+                callback(err);
+              } else {
+                if (res.headersSent) {
+                  callback("Response already sent");
+                } else {
+                  callback();
+                }
+              }
+            });
+          };
+        }),
+        (err) => {
+          if (err) {
+            next(err);
+          } else {
+            next();
+          }
+        }
+      );
     } else {
       handler(req, res, next);
     }

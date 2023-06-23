@@ -4,6 +4,9 @@
   "description": "Enable custom app to be used in multiple shopify stores",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=12.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/paweljedrzejczyk/shopify-multistore-app-middleware.git"
@@ -24,16 +27,18 @@
   },
   "author": "Pawel Jedrzejczyk",
   "dependencies": {
-    "@types/express": "^4.17.15"
+    "@types/express": "^4.17.17",
+    "async": "^3.2.4"
   },
   "devDependencies": {
-    "@shopify/shopify-api": "^6.1.0",
-    "@shopify/shopify-app-express": "1.x",
+    "@shopify/shopify-api": "^7.4.0",
+    "@shopify/shopify-app-express": "^2.1.3",
+    "@types/async": "^3.2.20",
     "typescript": "^4.9.4"
   },
   "peerDependencies": {
-    "@shopify/shopify-app-express": "1.x",
-    "@shopify/shopify-api": "6.x"
+    "@shopify/shopify-api": "7.x",
+    "@shopify/shopify-app-express": "2.x"
   },
   "license": "ISC",
   "publishConfig": {
