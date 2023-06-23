@@ -1,6 +1,6 @@
 {
   "name": "@paweljedrzejczyk/shopify-multistore-app-middleware",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Enable custom app to be used in multiple shopify stores",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
