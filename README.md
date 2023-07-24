@@ -1,10 +1,213 @@
 # Shopify Multistore App Middleware
 
-## Requirements
+## Basic Requirements
 
 - Multiple Shopify Stores,
 - Shopify App Created in Partners Account - one for each store - this is where we get unique API_KEY and API_SECRET from,
 - Each App needs to have the URL configured to point to the same URL where we have our App deployed, so multiple apps but pointing to same URL,
+
+## Frontend changes requirements
+
+The package is intented to allow the backend to work with multiple stores, but some frontend changes are needed as well.
+
+Update vite config to pass additional env vars with API Keys for multiple stores to frontend code:
+```tsx
+import { defineConfig } from "vite";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import https from "https";
+import react from "@vitejs/plugin-react";
+
+if (
+  process.env.npm_lifecycle_event === "build" &&
+  !process.env.CI &&
+  !process.env.SHOPIFY_API_KEY &&
+  !Object.keys(process.env).some(
+    (key) => key.startsWith("SHOPIFY_API_KEY_") && process.env[key]
+  )
+) {
+  console.warn(
+    "\nBuilding the frontend app without an API key. The frontend build will not run without an API key. Set the SHOPIFY_API_KEY environment variable when running the build command.\n"
+  );
+}
+
+const proxyOptions = {
+  target: `http://127.0.0.1:${process.env.BACKEND_PORT}`,
+  changeOrigin: false,
+  secure: true,
+  ws: false,
+};
+
+const host = process.env.HOST
+  ? process.env.HOST.replace(/https?:\/\//, "")
+  : "localhost";
+
+let hmrConfig;
+if (host === "localhost") {
+  hmrConfig = {
+    protocol: "ws",
+    host: "localhost",
+    port: 64999,
+    clientPort: 64999,
+  };
+} else {
+  hmrConfig = {
+    protocol: "wss",
+    host: host,
+    port: process.env.FRONTEND_PORT,
+    clientPort: 443,
+  };
+}
+
+function getEnvs() {
+  const envs = {};
+  Object.keys(process.env).forEach((env) => {
+    if (env.startsWith("SHOPIFY_API_KEY_")) {
+      envs[env] = process.env[env];
+    }
+  });
+
+  return {
+    "process.env.SHOPIFY_API_KEYS": JSON.stringify(envs),
+    "process.env.SHOPIFY_API_KEY": JSON.stringify(process.env.SHOPIFY_API_KEY),
+  };
+}
+
+export default defineConfig({
+  root: dirname(fileURLToPath(import.meta.url)),
+  plugins: [react()],
+  define: getEnvs(),
+  resolve: {
+    preserveSymlinks: true,
+  },
+  server: {
+    host: "localhost",
+    port: process.env.FRONTEND_PORT,
+    hmr: hmrConfig,
+    proxy: {
+      "^/(\\?.*)?$": proxyOptions,
+      "^/api(/|(\\?.*)?$)": proxyOptions,
+    },
+  },
+});
+```
+
+Update AppBridgeProvider.tsx to use different API Key based on the shop:
+```tsx
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Provider } from "@shopify/app-bridge-react";
+import { Banner, Layout, Page } from "@shopify/polaris";
+
+const sanitizedShopName = (shop: string): string =>
+  shop
+    .replace(/^https:\/\//, "")
+    .replace(".myshopify.com", "")
+    .replace("/admin", "")
+    .replace(/-/g, "_")
+    .toUpperCase();
+
+
+declare global {
+  interface Window {
+    __SHOPIFY_DEV_HOST: string;
+  }
+}
+
+/**
+ * A component to configure App Bridge.
+ * @desc A thin wrapper around AppBridgeProvider that provides the following capabilities:
+ *
+ * 1. Ensures that navigating inside the app updates the host URL.
+ * 2. Configures the App Bridge Provider, which unlocks functionality provided by the host.
+ *
+ * See: https://shopify.dev/apps/tools/app-bridge/react-components
+ */
+export function AppBridgeProvider({ children }: any) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const history = useMemo(
+    () => ({
+      replace: (path: any) => {
+        navigate(path, { replace: true });
+      },
+    }),
+    [navigate]
+  );
+
+  const routerConfig = useMemo(
+    () => ({ history, location }),
+    [history, location]
+  );
+
+  // The host may be present initially, but later removed by navigation.
+  // By caching this in state, we ensure that the host is never lost.
+  // During the lifecycle of an app, these values should never be updated anyway.
+  // Using state in this way is preferable to useMemo.
+  // See: https://stackoverflow.com/questions/60482318/version-of-usememo-for-caching-a-value-that-will-never-change
+  const [appBridgeConfig] = useState(() => {
+    const host =
+      new URLSearchParams(location.search).get("host") ||
+      window.__SHOPIFY_DEV_HOST;
+
+    window.__SHOPIFY_DEV_HOST = host;
+
+    const customApiKey = process.env.SHOPIFY_API_KEYS?.[
+      `SHOPIFY_API_KEY_${sanitizedShopName(
+        host ? window.atob(host) : ""
+      )}` as keyof typeof process.env.SHOPIFY_API_KEYS
+    ] as string;
+
+    return {
+      host,
+      apiKey: customApiKey || process.env.SHOPIFY_API_KEY || "",
+      forceRedirect: true,
+    };
+  });
+
+  if (!appBridgeConfig.apiKey || !appBridgeConfig.host) {
+    const bannerProps = !appBridgeConfig.apiKey
+      ? {
+          title: "Missing Shopify API Key",
+          children: (
+            <>
+              Your app is running without the SHOPIFY_API_KEY environment
+              variable. Please ensure that it is set when running or building
+              your React app.
+            </>
+          ),
+        }
+      : {
+          title: "Missing host query argument",
+          children: (
+            <>
+              Your app can only load if the URL has a <b>host</b> argument.
+              Please ensure that it is set, or access your app using the
+              Partners Dashboard <b>Test your app</b> feature
+            </>
+          ),
+        };
+
+    return (
+      <Page narrowWidth>
+        <Layout>
+          <Layout.Section>
+            <div style={{ marginTop: "100px" }}>
+              <Banner {...bannerProps} status="critical" />
+            </div>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  return (
+    <Provider config={appBridgeConfig} router={routerConfig}>
+      {children}
+    </Provider>
+  );
+}
+```
 
 ## Usage:
 
